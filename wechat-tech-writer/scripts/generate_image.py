@@ -16,9 +16,22 @@ import os
 import sys
 import argparse
 import base64
+import json
 import requests
 from pathlib import Path
 from typing import Optional, Dict, Any
+
+
+def load_wechat_config() -> Optional[Dict[str, Any]]:
+    """从 ~/.wechat-publisher/config.json 加载配置"""
+    config_path = Path.home() / ".wechat-publisher" / "config.json"
+    if config_path.exists():
+        try:
+            with open(config_path, 'r', encoding='utf-8') as f:
+                return json.load(f)
+        except Exception:
+            pass
+    return None
 
 
 class ImageGenerator:
@@ -44,11 +57,12 @@ class ImageGenerator:
         http_proxy = os.environ.get('HTTP_PROXY') or os.environ.get('http_proxy')
         https_proxy = os.environ.get('HTTPS_PROXY') or os.environ.get('https_proxy')
 
-        if http_proxy or https_proxy:
-            return {
-                'http': http_proxy or https_proxy,
-                'https': https_proxy or http_proxy
-            }
+        if http_proxy and https_proxy:
+            return {'http': http_proxy, 'https': https_proxy}
+        elif http_proxy:
+            return {'http': http_proxy, 'https': http_proxy}
+        elif https_proxy:
+            return {'http': https_proxy, 'https': https_proxy}
 
         return None
 
@@ -91,13 +105,14 @@ class GeminiImageGenerator(ImageGenerator):
             )
 
             # 处理响应并保存图片
-            for part in response.parts:
-                if part.inline_data is not None:
-                    # 获取图片对象
-                    image = part.as_image()
-                    # 保存图片
-                    image.save(output_path)
-                    return output_path
+            if response.parts:
+                for part in response.parts:
+                    if part.inline_data is not None:
+                        # 获取图片对象
+                        image = part.as_image()
+                        # 保存图片
+                        image.save(output_path)  # type: ignore[union-attr]
+                        return output_path
 
             raise ValueError("API 响应中未找到图片数据")
 
@@ -107,26 +122,26 @@ class GeminiImageGenerator(ImageGenerator):
 
 class DALLEImageGenerator(ImageGenerator):
     """DALL-E API图片生成器 (OpenAI)"""
-    
+
     def _get_api_key(self) -> str:
         api_key = os.environ.get('OPENAI_API_KEY')
         if not api_key:
             raise ValueError("请设置环境变量 OPENAI_API_KEY")
         return api_key
-    
+
     def generate(self, prompt: str, output_path: str, **kwargs) -> str:
         """
         使用DALL-E API生成图片
-        
+
         参考: https://platform.openai.com/docs/api-reference/images
         """
         url = "https://api.openai.com/v1/images/generations"
-        
+
         headers = {
             "Content-Type": "application/json",
             "Authorization": f"Bearer {self.api_key}"
         }
-        
+
         # DALL-E 3参数
         data = {
             "model": kwargs.get("model", "dall-e-3"),
@@ -143,9 +158,9 @@ class DALLEImageGenerator(ImageGenerator):
         try:
             response = requests.post(url, json=data, headers=headers, proxies=proxies, timeout=120)
             response.raise_for_status()
-            
+
             result = response.json()
-            
+
             # 提取图片数据
             if "data" in result and len(result["data"]) > 0:
                 image_data = result["data"][0].get("b64_json")
@@ -155,29 +170,95 @@ class DALLEImageGenerator(ImageGenerator):
                     with open(output_path, 'wb') as f:
                         f.write(image_bytes)
                     return output_path
-            
+
             raise ValueError(f"API返回数据格式异常: {result}")
-            
+
         except requests.exceptions.RequestException as e:
             raise RuntimeError(f"DALL-E API调用失败: {str(e)}")
 
 
 class AnthropicImageGenerator(ImageGenerator):
     """Anthropic原生图片生成（通过Claude调用）"""
-    
+
     def _get_api_key(self) -> str:
         # Claude环境下不需要单独的API key
         return "not_required"
-    
+
     def generate(self, prompt: str, output_path: str, **kwargs) -> str:
         """
         使用Claude的原生图片生成能力
-        
+
         注: 这个方法在claude.ai环境中可用
         """
         # 在claude.ai环境中，可以直接生成图片
         # 这里返回提示信息，实际生成由调用方处理
         return f"请使用Claude原生能力生成图片: {prompt}"
+
+
+class ConfiguredImageGenerator(ImageGenerator):
+    """从配置文件读取API设置的图片生成器 - 支持 Gemini 格式"""
+
+    def __init__(self, config: Dict[str, Any]):
+        self.base_url: str = config.get("base_url", "https://api.openai.com/v1")
+        self.model: str = config.get("model", "dall-e-3")
+        api_key = config.get("api_key")
+        if not api_key:
+            raise ValueError("配置文件中缺少 image_api.api_key")
+        self.api_key: str = api_key
+
+    def _get_api_key(self) -> str:
+        return self.api_key
+
+    def generate(self, prompt: str, output_path: str, **kwargs) -> str:
+        """使用 Gemini 格式的 API 生成图片"""
+        # 使用 Gemini 格式的 URL
+        url = f"{self.base_url}beta/models/{self.model}:generateContent"
+
+        headers = {
+            "Content-Type": "application/json",
+            "Authorization": f"Bearer {self.api_key}"
+        }
+
+        # Gemini 格式的请求体
+        data = {
+            "contents": [
+                {
+                    "parts": [
+                        {"text": prompt}
+                    ]
+                }
+            ],
+            "generationConfig": {
+                "responseModalities": ["image", "text"]
+            }
+        }
+
+        try:
+            print(f"→ 使用配置的API: {url}")
+            print(f"→ 模型: {self.model}")
+            # 禁用代理，直接连接，增加超时时间
+            response = requests.post(url, json=data, headers=headers, proxies=None, timeout=300)
+            response.raise_for_status()
+
+            result = response.json()
+
+            # 解析 Gemini 格式的响应
+            if "candidates" in result and len(result["candidates"]) > 0:
+                candidate = result["candidates"][0]
+                if "content" in candidate and "parts" in candidate["content"]:
+                    for part in candidate["content"]["parts"]:
+                        if "inlineData" in part:
+                            image_data = part["inlineData"].get("data")
+                            if image_data:
+                                image_bytes = base64.b64decode(image_data)
+                                with open(output_path, 'wb') as f:
+                                    f.write(image_bytes)
+                                return output_path
+
+            raise ValueError(f"API返回数据格式异常: {result}")
+
+        except requests.exceptions.RequestException as e:
+            raise RuntimeError(f"API调用失败: {str(e)}")
 
 
 # API映射
@@ -196,37 +277,37 @@ def main():
         description="调用生图API生成图片",
         formatter_class=argparse.RawDescriptionHelpFormatter
     )
-    
+
     parser.add_argument(
         "--prompt",
         required=True,
         help="图片生成提示词"
     )
-    
+
     parser.add_argument(
         "--api",
         choices=list(API_GENERATORS.keys()),
         default="gemini",
         help="使用的API (默认: gemini)"
     )
-    
+
     parser.add_argument(
         "--output",
         required=True,
         help="输出图片路径"
     )
-    
+
     parser.add_argument(
         "--aspect-ratio",
         default="16:9",
         help="图片宽高比 (默认: 16:9)"
     )
-    
+
     parser.add_argument(
         "--size",
         help="图片尺寸 (DALL-E专用, 如: 1792x1024)"
     )
-    
+
     parser.add_argument(
         "--quality",
         choices=["standard", "hd"],
@@ -240,49 +321,53 @@ def main():
     )
 
     args = parser.parse_args()
-    
+
     # 创建输出目录
     output_path = Path(args.output)
     output_path.parent.mkdir(parents=True, exist_ok=True)
-    
-    # 获取生成器类
-    generator_class = API_GENERATORS[args.api]
-    
+
+    # 准备参数
+    kwargs = {
+        "aspect_ratio": args.aspect_ratio,
+    }
+
+    # 添加代理配置
+    if args.proxy:
+        kwargs["proxy"] = args.proxy
+
+    if args.size:
+        kwargs["size"] = args.size
+    kwargs["quality"] = args.quality
+
     try:
-        # 创建生成器实例
-        generator = generator_class()
-        
-        # 准备参数
-        kwargs = {
-            "aspect_ratio": args.aspect_ratio,
-        }
+        # 优先尝试从配置文件加载 image_api
+        config = load_wechat_config()
+        if config and "image_api" in config:
+            print("🎨 使用配置文件中的 image_api 生成图片...")
+            print(f"📝 提示词: {args.prompt}")
+            generator = ConfiguredImageGenerator(config["image_api"])
+        else:
+            # 获取生成器类
+            generator_class = API_GENERATORS[args.api]
+            # 创建生成器实例
+            generator = generator_class()
+            # 生成图片
+            print(f"🎨 使用 {args.api.upper()} API生成图片...")
+            print(f"📝 提示词: {args.prompt}")
 
-        # 添加代理配置
-        if args.proxy:
-            kwargs["proxy"] = args.proxy
-
-        if args.api in ["dalle", "openai"]:
-            if args.size:
-                kwargs["size"] = args.size
-            kwargs["quality"] = args.quality
-        
-        # 生成图片
-        print(f"🎨 使用 {args.api.upper()} API生成图片...")
-        print(f"📝 提示词: {args.prompt}")
-        
         result_path = generator.generate(
             prompt=args.prompt,
             output_path=str(output_path),
             **kwargs
         )
-        
+
         if args.api in ["anthropic", "claude"]:
             print(f"ℹ️  {result_path}")
             return 1
-        
+
         print(f"✅ 图片已生成: {result_path}")
         return 0
-        
+
     except Exception as e:
         print(f"❌ 生成失败: {str(e)}", file=sys.stderr)
         return 1
