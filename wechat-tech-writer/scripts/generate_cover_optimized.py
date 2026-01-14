@@ -3,13 +3,14 @@
 """按照优化后的设计原则生成封面图"""
 import sys
 import os
+import argparse
 
 sys.path.insert(0, os.path.dirname(__file__))
 from generate_image import GeminiImageGenerator
 
-def generate_optimized_cover():
+def generate_optimized_cover(title, output_path):
     """
-    按照新的设计原则生成Claude Skills封面图
+    按照新的设计原则生成封面图
 
     设计原则：
     1. 鲜明的主题色彩 - 蓝紫渐变 (科技创新类)
@@ -19,7 +20,7 @@ def generate_optimized_cover():
     """
 
     # 步骤1: 主题分析
-    # 关键词: Claude Skills, AI提效, 技能包, 专家系统
+    # 关键词: 根据标题动态生成
     # 核心价值: 让AI秒变领域专家
     # 目标情绪: 好奇、兴奋、启发
 
@@ -27,7 +28,7 @@ def generate_optimized_cover():
     # 科技创新类: 蓝紫渐变 (#1a1f5c → #7c3aed)
 
     # 步骤3: 构建提示词（使用AI/大模型类模板）
-    prompt = """A stunning, eye-catching cover image for Claude Skills article.
+    prompt = f"""A stunning, eye-catching cover image for {title} article.
 
 Design specifications:
 - Background: vibrant gradient from deep blue (#1a1f5c) to electric purple (#7c3aed), with subtle particle effects and glowing accents
@@ -37,7 +38,7 @@ Design specifications:
 - Depth and dimension: strong 3D perspective with light reflections
 
 Text layout (CRITICAL - all text in simplified Chinese):
-- Top center: Large bold title "Claude Skills" in white, modern sans-serif font
+- Top center: Large bold title "{title}" in white, modern sans-serif font
 - Below title: Chinese subtitle "让AI秒变领域专家" in elegant, clean font
 - Bottom left corner: Small text "告别重复劳动 | 10倍提效" as a tagline
 
@@ -55,11 +56,9 @@ IMPORTANT: All text in simplified Chinese (简体中文), minimal text, accurate
 Aspect ratio: 16:9, high quality, magazine cover style.
 """
 
-    output_path = r"G:\git_pull\微信公众号文章\AI提效系列\claude_skills_cover_optimized.png"
-
     try:
         print("Generating optimized cover image with enhanced design principles...")
-        print("Theme: Claude Skills - AI Capability Extension System")
+        print(f"Theme: {title}")
         print("Core value: Turn AI into domain experts instantly")
         print("Color scheme: Blue-purple gradient (tech innovation)")
         print("Emotional appeal: Curiosity, excitement, empowerment")
@@ -81,5 +80,25 @@ Aspect ratio: 16:9, high quality, magazine cover style.
         print(f"Error: {str(e)}")
         return 1
 
+def main():
+    parser = argparse.ArgumentParser(
+        description="按照优化后的设计原则生成封面图",
+        formatter_class=argparse.RawDescriptionHelpFormatter
+    )
+
+    parser.add_argument(
+        "title",
+        help="文章标题"
+    )
+
+    parser.add_argument(
+        "output_path",
+        help="输出图片路径"
+    )
+
+    args = parser.parse_args()
+
+    return generate_optimized_cover(args.title, args.output_path)
+
 if __name__ == "__main__":
-    sys.exit(generate_optimized_cover())
+    sys.exit(main())
