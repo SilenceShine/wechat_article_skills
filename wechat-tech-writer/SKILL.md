@@ -1,7 +1,7 @@
 ---
 name: wechat-tech-writer
 description: 自动搜索、抓取、改写技术内容，生成适合微信公众号的中文科普文章。涵盖AI大模型、GitHub开源工具、技术话题。当用户说"写一篇关于XXX的文章"、"帮我研究XXX"、"生成公众号文章"时使用。
-allowed-tools: WebSearch, WebFetch, Read, Write, Edit, Bash
+allowed-tools: mcp__searxng__search, mcp__open-websearch__search, WebFetch, Read, Write, Edit, Bash
 ---
 
 # 微信公众号技术文章写作助手
@@ -55,13 +55,27 @@ allowed-tools: WebSearch, WebFetch, Read, Write, Edit, Bash
 
 ### 步骤2：搜索高质量内容源
 
-使用 `WebSearch` 工具进行3-5轮搜索：
+进行3-5轮搜索，获取高质量内容：
 
 **搜索策略**：
 - **第1轮**：官方信息（"{产品名} 官方文档"、"{产品名} GitHub"）
 - **第2轮**：技术解析（"{产品名} 详细介绍"、"{产品名} 教程"）
 - **第3轮**：对比评测（"{产品名} vs {竞品}"、"{产品名} 评测"）
 - **第4轮**：补充验证（根据前3轮结果补充缺失信息）
+
+**搜索工具选择（按优先级）**：
+
+1. **优先使用 `mcp__searxng__search`**（如果可用）
+   - SearXNG 元搜索引擎，聚合多个搜索源
+   - 支持更多搜索引擎和更丰富的结果
+   - 可自定义搜索引擎、语言、时间范围等参数
+   - 示例：`mcp__searxng__search(query="Claude Code", engines=["google", "bing"], language="zh")`
+
+2. **备选使用 `mcp__open-websearch__search`**
+   - 支持 DuckDuckGo、Bing、Brave 搜索引擎
+   - 默认使用 DuckDuckGo
+   - 每次搜索默认返回10条结果，可通过 limit 参数调整（最多50条）
+   - 示例：`mcp__open-websearch__search(query="Claude Code", engines=["duckduckgo"], limit=10)`
 
 **质量标准**：优先选择官方文档、知名技术博客、权威媒体报道
 

@@ -16,15 +16,33 @@ import os
 import sys
 import argparse
 import base64
+import json
 import requests
 from pathlib import Path
 from typing import Optional, Dict, Any
 
 
+def load_config() -> Dict[str, Any]:
+    """从配置文件加载API配置"""
+    config_file = Path.home() / ".wechat-publisher" / "config.json"
+
+    if not config_file.exists():
+        return {}
+
+    try:
+        with open(config_file, 'r', encoding='utf-8') as f:
+            config = json.load(f)
+            return config.get('image_api', {})
+    except Exception as e:
+        print(f"⚠️  配置文件读取失败: {e}", file=sys.stderr)
+        return {}
+
+
 class ImageGenerator:
     """图片生成器基类"""
 
-    def __init__(self, api_key: Optional[str] = None):
+    def __init__(self, api_key: Optional[str] = None, config: Optional[Dict[str, Any]] = None):
+        self.config = config or load_config()
         self.api_key = api_key or self._get_api_key()
 
     def _get_api_key(self) -> str:
@@ -58,20 +76,87 @@ class ImageGenerator:
 
 
 class GeminiImageGenerator(ImageGenerator):
-    """Gemini Imagen API图片生成器 - 使用 Google Genai SDK"""
+    """Gemini Imagen API图片生成器 - 支持官方SDK和自定义API"""
 
     def _get_api_key(self) -> str:
+        # 优先从配置文件读取
+        if self.config and 'api_key' in self.config:
+            return self.config['api_key']
+
+        # 其次从环境变量读取
         api_key = os.environ.get('GEMINI_API_KEY') or os.environ.get('GOOGLE_API_KEY')
         if not api_key:
-            raise ValueError("请设置环境变量 GEMINI_API_KEY 或 GOOGLE_API_KEY")
+            raise ValueError("请设置环境变量 GEMINI_API_KEY 或 GOOGLE_API_KEY，或在配置文件中配置 image_api")
         return api_key
 
     def generate(self, prompt: str, output_path: str, **kwargs) -> str:
         """
-        使用 Google Genai SDK 生成图片
+        生成图片 - 支持官方SDK和自定义API端点
 
         参考: https://ai.google.dev/gemini-api/docs/image-generation
         """
+        # 检查是否使用自定义API端点
+        base_url = self.config.get('base_url') if self.config else None
+
+        if base_url:
+            # 使用自定义API端点
+            return self._generate_with_custom_api(prompt, output_path, base_url, **kwargs)
+        else:
+            # 使用官方Google Genai SDK
+            return self._generate_with_official_sdk(prompt, output_path, **kwargs)
+
+    def _generate_with_custom_api(self, prompt: str, output_path: str, base_url: str, **kwargs) -> str:
+        """使用自定义API端点生成图片 - Gemini API格式"""
+        model = self.config.get('model', kwargs.get('model', 'gemini-3-pro-image-preview'))
+
+        # Gemini API 格式: /v1/models/{model}:generateContent
+        url = f"{base_url.rstrip('/')}/models/{model}:generateContent"
+
+        headers = {
+            "Content-Type": "application/json",
+            "x-goog-api-key": self.api_key
+        }
+
+        # Gemini API 请求格式
+        data = {
+            "contents": [
+                {
+                    "parts": [
+                        {"text": prompt}
+                    ]
+                }
+            ]
+        }
+
+        # 配置代理
+        proxies = self._get_proxies(kwargs.get("proxy"))
+
+        try:
+            response = requests.post(url, json=data, headers=headers, proxies=proxies, timeout=120)
+            response.raise_for_status()
+
+            result = response.json()
+
+            # 提取图片数据 - Gemini 返回格式
+            if "candidates" in result and len(result["candidates"]) > 0:
+                parts = result["candidates"][0].get("content", {}).get("parts", [])
+                for part in parts:
+                    if "inlineData" in part:
+                        image_data = part["inlineData"].get("data")
+                        if image_data:
+                            # 解码并保存图片
+                            image_bytes = base64.b64decode(image_data)
+                            with open(output_path, 'wb') as f:
+                                f.write(image_bytes)
+                            return output_path
+
+            raise ValueError(f"API返回数据格式异常: {result}")
+
+        except requests.exceptions.RequestException as e:
+            raise RuntimeError(f"自定义API调用失败: {str(e)}")
+
+    def _generate_with_official_sdk(self, prompt: str, output_path: str, **kwargs) -> str:
+        """使用官方Google Genai SDK生成图片"""
         try:
             from google import genai
         except ImportError:
