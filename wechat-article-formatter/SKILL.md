@@ -36,6 +36,39 @@ fi
 
 ---
 
+### 步骤1.5：检查封面图（强制步骤）
+
+**⚠️ 重要提醒**：每篇文章必须有封面图！
+
+**检查封面图是否存在**：
+```bash
+# 检查当前目录是否有 cover.png
+if [ -f "cover.png" ]; then
+    echo "✅ 封面图已存在：cover.png"
+else
+    echo "❌ 警告：未找到封面图！请先生成封面图再继续"
+fi
+```
+
+**如果没有封面图**：
+1. 提醒用户需要生成封面图
+2. 建议使用 `wechat-tech-writer` 的 `scripts/generate_image.py` 生成
+3. 或者使用以下命令快速生成：
+```bash
+cd ~/.claude/skills/wechat-tech-writer
+python scripts/generate_image.py \
+  --prompt "封面图提示词..." \
+  --api gemini \
+  --output "用户工作目录/cover.png"
+```
+
+**封面图要求**：
+- 尺寸：16:9 比例
+- 格式：PNG 或 JPG
+- 内容：与文章主题相关，有吸引力的设计
+
+---
+
 ### 步骤2：检查 examples 目录（优先使用精美模板）
 
 **⚠️ 重要规则**：

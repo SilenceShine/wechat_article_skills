@@ -21,6 +21,11 @@ import requests
 from pathlib import Path
 from typing import Optional, Dict, Any
 
+# 修复 Windows 编码问题
+if sys.platform == 'win32':
+    sys.stdout.reconfigure(encoding='utf-8', errors='replace')
+    sys.stderr.reconfigure(encoding='utf-8', errors='replace')
+
 
 def load_config() -> Dict[str, Any]:
     """从配置文件加载API配置"""
