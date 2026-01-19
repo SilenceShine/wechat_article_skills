@@ -86,7 +86,7 @@ class WeChatPublisher:
         if not self.appid.startswith('wx') or len(self.appid) != 18:
             print("⚠ 警告: AppID格式可能不正确（应为wx开头的18位字符）")
 
-        print(f"✓ 配置加载成功 (AppID: {self.appid[:6]}***)")
+        print(f"[OK] 配置加载成功 (AppID: {self.appid[:6]}***)")
 
     def _interactive_setup(self):
         """交互式配置向导"""
@@ -106,7 +106,7 @@ class WeChatPublisher:
             json.dump(config_data, f, indent=2, ensure_ascii=False)
 
         os.chmod(self.CONFIG_FILE, 0o600)
-        print(f"\n✓ 配置已保存到: {self.CONFIG_FILE}")
+        print(f"\n[OK] 配置已保存到: {self.CONFIG_FILE}")
         print("  (已设置权限为600，仅当前用户可读写)")
 
         self.appid = appid
@@ -161,7 +161,7 @@ class WeChatPublisher:
 
                 # 检查token是否过期（提前5分钟刷新）
                 if time.time() < cache.get('expires_at', 0) - 300:
-                    print("✓ 使用缓存的access_token")
+                    print("[OK] 使用缓存的access_token")
                     return cache['access_token']
             except Exception as e:
                 print(f"⚠ 读取token缓存失败: {e}")
@@ -200,7 +200,7 @@ class WeChatPublisher:
         with open(self.TOKEN_CACHE_FILE, 'w') as f:
             json.dump(cache_data, f, indent=2)
 
-        print(f"✓ 获取access_token成功 (有效期: {expires_in}秒)")
+        print(f"[OK] 获取access_token成功 (有效期: {expires_in}秒)")
         return access_token
 
     def upload_image(self, image_path: str, return_url: bool = False):
@@ -243,7 +243,7 @@ class WeChatPublisher:
 
         media_id = result.get('media_id')
         image_url = result.get('url', '')
-        print(f"✓ 图片上传成功 (media_id: {media_id})")
+        print(f"[OK] 图片上传成功 (media_id: {media_id})")
 
         if return_url:
             return media_id, image_url
@@ -348,7 +348,7 @@ class WeChatPublisher:
         content = re.sub(img_pattern, replace_image, content)
 
         if uploaded_count > 0:
-            print(f"  ✓ 成功上传 {uploaded_count} 张内容图片")
+            print(f"  [OK] 成功上传 {uploaded_count} 张内容图片")
 
         return content
 
@@ -661,7 +661,7 @@ class WeChatPublisher:
 
         # 3. 修复微信编辑器的样式破坏问题
         content = self._fix_wechat_editor_issues(content)
-        print("✓ 已优化HTML格式（防止编辑模式样式错位）")
+        print("[OK] 已优化HTML格式（防止编辑模式样式错位）")
 
         # 微信字段长度限制
         MAX_AUTHOR_BYTES = 20      # 作者名20字节
@@ -773,7 +773,7 @@ class WeChatPublisher:
                 )
                 raise Exception(error_msg)
 
-        print(f"✓ 草稿创建成功!")
+        print(f"[OK] 草稿创建成功!")
         print(f"  media_id: {result.get('media_id')}")
 
         return result
@@ -855,7 +855,7 @@ def main():
         )
 
         print(f"\n{'='*50}")
-        print("✓ 发布成功！请前往微信公众号后台查看草稿")
+        print("[OK] 发布成功！请前往微信公众号后台查看草稿")
         print(f"{'='*50}")
 
     except KeyboardInterrupt:
